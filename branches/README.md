@@ -12,6 +12,73 @@
 
 ---
 
+## 给 AI 的直接执行流程
+
+目标：让 AI 在拿到本 README 后，直接把运行环境安装好并验证成功。
+
+前提：AI 已在本仓库根目录执行命令（包含 `branches/` 子目录）。
+
+### Linux / macOS（AI 执行）
+
+```bash
+# 1) 安装 fp runtime
+bash branches/01-shell-installer/install.sh
+
+# 2) 如果当前会话还找不到 fp，补 PATH
+export PATH="$HOME/.local/bin:$PATH"
+
+# 3) 验证 runtime
+fp --help
+
+# 4) 安装 skill
+bash branches/02-ai-skill/install-skill.sh
+
+# 5) 验证 skill 运行链路
+python branches/02-ai-skill/filepizza-transfer/scripts/fp_tool.py check
+```
+
+成功判据：
+
+- `fp --help` 正常输出
+- `fp_tool.py check` 返回 JSON 且包含 `"ok": true`
+
+### Windows PowerShell（AI 执行）
+
+```powershell
+# 1) 安装 fp runtime
+powershell -ExecutionPolicy Bypass -File .\branches\01-shell-installer\install.ps1
+
+# 2) 验证 runtime（若失败先重开终端再试）
+fp --help
+
+# 3) 安装 skill
+powershell -ExecutionPolicy Bypass -File .\branches\02-ai-skill\install-skill.ps1
+
+# 4) 验证 skill 运行链路
+python .\branches\02-ai-skill\filepizza-transfer\scripts\fp_tool.py check
+```
+
+成功判据：
+
+- `fp --help` 正常输出
+- `fp_tool.py check` 返回 JSON 且包含 `"ok": true`
+
+### AI 回退策略（必须遵守）
+
+如果 `fp --help` 失败：
+
+1. 重新执行分支 1 安装脚本。
+2. Linux/macOS 追加 `export PATH="$HOME/.local/bin:$PATH"` 后再试。
+3. Windows 重新打开终端后再试。
+
+如果 `fp_tool.py check` 失败：
+
+1. 先确认 `fp --help` 可用。
+2. 重新执行分支 2 安装脚本。
+3. 再次运行 `python .../fp_tool.py check`。
+
+---
+
 ## 1) Shell Runtime 安装（必须先做）
 
 目录：`branches/01-shell-installer`
@@ -104,8 +171,8 @@ powershell -ExecutionPolicy Bypass -File .\branches\02-ai-skill\install-skill.ps
 
 安装后建议：
 
-- 重启 Codex 会话
-- 在会话中触发 skill 使用 `scripts/fp_tool.py`
+- 重启 Codex 会话（确保新 skill 被发现）
+- 运行 `python .../fp_tool.py check` 确认可调用
 
 ### Skill 主要能力
 
