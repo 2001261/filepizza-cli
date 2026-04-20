@@ -6,10 +6,21 @@ This package installs `fp` for shell environments:
 - macOS
 - PowerShell (Windows)
 
+## Prerequisites
+
+- `node` is installed
+- `npm` is installed
+
 ## Linux / macOS
 
 ```bash
 bash branches/01-shell-installer/install.sh
+```
+
+Verify:
+
+```bash
+fp --help
 ```
 
 Uninstall:
@@ -22,6 +33,12 @@ bash branches/01-shell-installer/uninstall.sh
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\branches\01-shell-installer\install.ps1
+```
+
+Verify:
+
+```powershell
+fp --help
 ```
 
 Uninstall:
@@ -39,3 +56,10 @@ Override dirs with:
 
 - `FILEPIZZA_INSTALL_DIR`
 - `FILEPIZZA_BIN_DIR`
+
+## PATH Notes
+
+If `fp` is not found after install:
+
+- Linux/macOS: add `~/.local/bin` to PATH
+- Windows: reopen terminal so user PATH refreshes
