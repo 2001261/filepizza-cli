@@ -1,10 +1,10 @@
 {
-  "name": "filepizza",
+  "name": "filepizza-cli",
   "version": "2.0.0",
-  "description": "Free peer-to-peer file transfers in your browser.",
-  "author": "Alex Kern <alex@kern.io> (http://kern.io)",
+  "description": "Unofficial FilePizza-based CLI wrapper for headless file transfer workflows.",
+  "author": "King",
   "license": "BSD-3-Clause",
-  "homepage": "https://github.com/kern/filepizza",
+  "homepage": "https://github.com/2001261/filepizza-cli",
   "bin": {
     "fp": "./bin/fp.js"
   },
@@ -34,10 +34,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@github.com:kern/filepizza.git"
+    "url": "git@github.com:2001261/filepizza-cli.git"
   },
   "bugs": {
-    "url": "https://github.com/kern/filepizza/issues"
+    "url": "https://github.com/2001261/filepizza-cli/issues"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.11",
