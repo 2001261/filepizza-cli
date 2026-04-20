@@ -3,12 +3,22 @@ import React, { JSX } from 'react'
 export default function ProgressBar({
   value,
   max,
+  bytes,
+  totalBytes,
 }: {
   value: number
   max: number
+  bytes?: number
+  totalBytes?: number
 }): JSX.Element {
   const percentage = (value / max) * 100
   const isComplete = value === max
+  const dataBytes = Number.isFinite(bytes)
+    ? Math.max(0, Math.round(bytes as number))
+    : undefined
+  const dataTotalBytes = Number.isFinite(totalBytes)
+    ? Math.max(0, Math.round(totalBytes as number))
+    : undefined
 
   return (
     <div
@@ -30,6 +40,8 @@ export default function ProgressBar({
       <div className="absolute inset-0 flex items-center justify-center">
         <span
           id="progress-percentage"
+          data-bytes={dataBytes}
+          data-total-bytes={dataTotalBytes}
           className="text-white font-bold text-shadow"
         >
           {Math.round(percentage)}%

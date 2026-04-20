@@ -102,7 +102,12 @@ export function DownloadComplete({
       <div className="flex flex-col space-y-5 w-full">
         <UploadFileList files={filesInfo} />
         <div className="w-full">
-          <ProgressBar value={bytesDownloaded} max={totalSize} />
+          <ProgressBar
+            value={bytesDownloaded}
+            max={totalSize}
+            bytes={bytesDownloaded}
+            totalBytes={totalSize}
+          />
         </div>
         <ReturnHome />
       </div>
@@ -129,7 +134,12 @@ export function DownloadInProgress({
       <div className="flex flex-col space-y-5 w-full">
         <UploadFileList files={filesInfo} />
         <div className="w-full">
-          <ProgressBar value={bytesDownloaded} max={totalSize} />
+          <ProgressBar
+            value={bytesDownloaded}
+            max={totalSize}
+            bytes={bytesDownloaded}
+            totalBytes={totalSize}
+          />
         </div>
         <div className="flex justify-center w-full">
           <StopButton onClick={onStop} isDownloading />

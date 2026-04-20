@@ -46,19 +46,33 @@ function printHumanDownload(result) {
 }
 
 function formatBytes(bytes) {
-  if (bytes < 1024) return `${bytes} B`
+  if (!Number.isFinite(bytes) || bytes < 0) return '0 B'
+  if (bytes < 1024) return `${Math.round(bytes)} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
+function formatSpeed(bytesPerSecond) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond < 0) {
+    return '0 B/s'
+  }
+  return `${formatBytes(bytesPerSecond)}/s`
+}
+
 function createProgressPrinter(label) {
   let lastPercent = -1
+  let lastBytes = -1
   let hasTTYLine = false
+  let startedAt = 0
+  let lastRenderAt = 0
+  const speedSamples = []
+  const speedWindowMs = 2000
+  const minRenderIntervalMs = process.stdout.isTTY ? 250 : 1000
 
   const printLine = (line) => {
     if (process.stdout.isTTY) {
-      process.stdout.write(`\r${line.padEnd(90, ' ')}`)
+      process.stdout.write(`\r${line.padEnd(140, ' ')}`)
       hasTTYLine = true
     } else {
       process.stdout.write(`${line}\n`)
@@ -69,20 +83,80 @@ function createProgressPrinter(label) {
     onProgress(event) {
       const percent = Number(event?.percent)
       if (!Number.isFinite(percent)) return
-      if (percent === lastPercent) return
-      lastPercent = percent
+      const now = Date.now()
+      if (!startedAt) startedAt = now
 
-      let line = `${label}: ${percent}%`
+      const normalizedPercent = Math.max(0, Math.min(100, Math.round(percent)))
+      const bytes = Number(event?.bytes)
+      const totalBytes = Number(event?.totalBytes)
+      const hasByteProgress =
+        Number.isFinite(bytes) &&
+        Number.isFinite(totalBytes) &&
+        totalBytes > 0 &&
+        bytes >= 0
+
+      if (hasByteProgress) {
+        speedSamples.push({ ts: now, bytes })
+        while (speedSamples.length > 0 && now - speedSamples[0].ts > speedWindowMs) {
+          speedSamples.shift()
+        }
+      }
+
+      const percentChanged = normalizedPercent !== lastPercent
+      const bytesChanged = hasByteProgress && bytes !== lastBytes
+      if (!percentChanged && !bytesChanged) return
+
       if (
-        Number.isFinite(event?.bytes) &&
-        Number.isFinite(event?.totalBytes) &&
-        event.totalBytes > 0
+        !percentChanged &&
+        now - lastRenderAt < minRenderIntervalMs &&
+        process.stdout.isTTY
       ) {
-        line += ` (${formatBytes(event.bytes)} / ${formatBytes(event.totalBytes)})`
+        return
+      }
+      if (
+        !percentChanged &&
+        now - lastRenderAt < minRenderIntervalMs &&
+        !process.stdout.isTTY
+      ) {
+        return
+      }
+
+      let line = `${label}: ${normalizedPercent}%`
+      if (hasByteProgress) {
+        line += ` (${formatBytes(bytes)} / ${formatBytes(totalBytes)})`
+      }
+
+      if (hasByteProgress) {
+        let realtimeSpeed = null
+        if (speedSamples.length >= 2) {
+          const oldest = speedSamples[0]
+          const elapsed = (now - oldest.ts) / 1000
+          const delta = bytes - oldest.bytes
+          if (elapsed > 0 && delta >= 0) {
+            realtimeSpeed = delta / elapsed
+          }
+        }
+
+        const totalElapsed = (now - startedAt) / 1000
+        const averageSpeed =
+          totalElapsed > 0 ? Math.max(0, bytes / totalElapsed) : null
+
+        if (realtimeSpeed !== null) {
+          line += ` | 实时 ${formatSpeed(realtimeSpeed)}`
+        }
+        if (averageSpeed !== null) {
+          line += ` | 平均 ${formatSpeed(averageSpeed)}`
+        }
       }
 
       printLine(line)
-      if (process.stdout.isTTY && percent >= 100) {
+      lastRenderAt = now
+      lastPercent = normalizedPercent
+      if (hasByteProgress) {
+        lastBytes = bytes
+      }
+
+      if (process.stdout.isTTY && normalizedPercent >= 100) {
         process.stdout.write('\n')
         hasTTYLine = false
       }

@@ -136,12 +136,34 @@ function parseUploadAckLog(text) {
   }
 }
 
+function parseDownloadChunkLog(text) {
+  const match = text.match(/\[Downloader\]\s+received chunk \d+ for .* \((\d+)-(\d+)\)\s+final=(true|false)/)
+  if (!match) return null
+
+  const start = Number(match[1])
+  const end = Number(match[2])
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null
+
+  return {
+    start,
+    end,
+    bytes: end - start,
+  }
+}
+
 function parsePercentageText(text) {
   const match = String(text || '').match(/(\d{1,3})%/)
   if (!match) return null
   const value = Number(match[1])
   if (Number.isNaN(value)) return null
   return Math.max(0, Math.min(100, value))
+}
+
+function parseByteValue(value) {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return Math.round(parsed)
 }
 
 async function startUploadSession({ baseURL, filePath, password, onProgress }) {
@@ -397,21 +419,73 @@ async function runDownload({
   const page = await context.newPage()
   let progressTimer = null
   let lastProgressPercent = -1
+  let lastProgressBytes = -1
+  let lastProgressTotalBytes = -1
+  let observedDownloadedBytes = 0
+
+  const onConsole = (msg) => {
+    const chunk = parseDownloadChunkLog(msg.text())
+    if (!chunk) return
+    observedDownloadedBytes += chunk.bytes
+  }
 
   try {
+    page.on('console', onConsole)
     await gotoWithRetry(page, shareURL)
     await waitForDownloaderReadyState(page, password)
 
     if (typeof onProgress === 'function') {
       progressTimer = setInterval(async () => {
-        const text = await page
-          .locator('#progress-percentage')
-          .first()
-          .textContent()
-          .catch(() => '')
-        const percent = parsePercentageText(text)
-        if (percent === null || percent === lastProgressPercent) return
+        const snapshot = await page
+          .evaluate(() => {
+            const el = document.querySelector('#progress-percentage')
+            if (!el) return null
+            return {
+              text: el.textContent || '',
+              bytes: el.getAttribute('data-bytes') || '',
+              totalBytes: el.getAttribute('data-total-bytes') || '',
+            }
+          })
+          .catch(() => null)
+
+        const percent = parsePercentageText(snapshot?.text || '')
+        if (percent === null) return
+
+        const attrBytes = parseByteValue(snapshot?.bytes || '')
+        const bytes =
+          Number.isFinite(attrBytes) && attrBytes >= 0
+            ? attrBytes
+            : observedDownloadedBytes > 0
+              ? observedDownloadedBytes
+              : null
+        const totalBytes = parseByteValue(snapshot?.totalBytes || '')
+        const hasByteProgress =
+          Number.isFinite(bytes) &&
+          bytes >= 0
+        const hasTotalBytes =
+          hasByteProgress &&
+          Number.isFinite(totalBytes) &&
+          totalBytes > 0
+
+        const percentChanged = percent !== lastProgressPercent
+        const bytesChanged = hasByteProgress && bytes !== lastProgressBytes
+        if (!percentChanged && !bytesChanged) return
+
         lastProgressPercent = percent
+        if (hasByteProgress) {
+          lastProgressBytes = bytes
+          if (hasTotalBytes) {
+            lastProgressTotalBytes = totalBytes
+          }
+          onProgress({
+            phase: 'download',
+            percent,
+            bytes,
+            ...(hasTotalBytes ? { totalBytes } : {}),
+          })
+          return
+        }
+
         onProgress({ phase: 'download', percent })
       }, 300)
     }
@@ -445,7 +519,22 @@ async function runDownload({
     const stat = await fs.promises.stat(savePath)
 
     if (typeof onProgress === 'function' && lastProgressPercent < 100) {
-      onProgress({ phase: 'download', percent: 100 })
+      if (lastProgressTotalBytes > 0) {
+        onProgress({
+          phase: 'download',
+          percent: 100,
+          bytes: lastProgressTotalBytes,
+          totalBytes: lastProgressTotalBytes,
+        })
+      } else if (lastProgressBytes >= 0) {
+        onProgress({
+          phase: 'download',
+          percent: 100,
+          bytes: lastProgressBytes,
+        })
+      } else {
+        onProgress({ phase: 'download', percent: 100 })
+      }
     }
 
     return {
@@ -459,6 +548,7 @@ async function runDownload({
       clearInterval(progressTimer)
       progressTimer = null
     }
+    page.off('console', onConsole)
     await context.close().catch(() => {})
     await browser.close().catch(() => {})
   }
