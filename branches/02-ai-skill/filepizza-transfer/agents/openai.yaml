@@ -1,0 +1,4 @@
+interface:
+  display_name: "FilePizza Transfer"
+  short_description: "AI wrapper for fp upload/download sessions"
+  default_prompt: "Use scripts/fp_tool.py to start upload sessions, check status, stop sessions, or download files via the shell-installed fp runtime."
