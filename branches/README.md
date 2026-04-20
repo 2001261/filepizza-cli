@@ -174,6 +174,21 @@ powershell -ExecutionPolicy Bypass -File .\branches\02-ai-skill\install-skill.ps
 - 重启 Codex 会话（确保新 skill 被发现）
 - 运行 `python .../fp_tool.py check` 确认可调用
 
+### OpenClaw 注册要点
+
+如果要在 OpenClaw 中使用本 skill，还需要两步：
+
+1. 安装 OpenClaw skill：
+   - Linux/macOS：`bash branches/02-ai-skill/install-openclaw-skill.sh`
+   - PowerShell：`powershell -ExecutionPolicy Bypass -File .\branches\02-ai-skill\install-openclaw-skill.ps1`
+2. 在 OpenClaw 配置中同时满足：
+   - `agents.defaults.skills` 包含 `filepizza-transfer`
+   - `tools` 策略未禁用 `exec`（若用白名单，包含 `exec` 或 `group:runtime`）
+
+可直接参考示例：
+
+- `branches/02-ai-skill/filepizza-transfer/agents/openclaw.json5.example`
+
 ### Skill 主要能力
 
 - `upload-start`：启动上传并返回链接

@@ -1,0 +1,16 @@
+{
+  // Example: ~/.openclaw/openclaw.json
+  agents: {
+    defaults: {
+      // Enable this skill in agent defaults (allowlist mode).
+      skills: ["filepizza-transfer"],
+    },
+  },
+  tools: {
+    // This skill relies on command execution via exec.
+    // If you keep a strict allowlist, include exec or group:runtime.
+    allow: ["group:runtime", "group:fs"],
+    // Do not deny exec when using this skill.
+    deny: [],
+  },
+}

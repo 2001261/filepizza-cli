@@ -44,6 +44,11 @@ node ./bin/fp.js download "https://file.pizza/download/xxxx"
 2. `branches/02-ai-skill`  
    AI Skill 封装（可调用 Branch 1 安装出来的 `fp` 进行传输）
 
+OpenClaw 接入（tools 注册、skill 激活与触发规则）请看：
+
+- `branches/02-ai-skill/README.md`
+- `branches/02-ai-skill/filepizza-transfer/SKILL.md`
+
 ## 许可与致谢
 
 - 本仓库沿用 BSD-3-Clause（见 `LICENSE`）。
