@@ -45,6 +45,57 @@ function printHumanDownload(result) {
   process.stdout.write('状态: 完成\n')
 }
 
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function createProgressPrinter(label) {
+  let lastPercent = -1
+  let hasTTYLine = false
+
+  const printLine = (line) => {
+    if (process.stdout.isTTY) {
+      process.stdout.write(`\r${line.padEnd(90, ' ')}`)
+      hasTTYLine = true
+    } else {
+      process.stdout.write(`${line}\n`)
+    }
+  }
+
+  return {
+    onProgress(event) {
+      const percent = Number(event?.percent)
+      if (!Number.isFinite(percent)) return
+      if (percent === lastPercent) return
+      lastPercent = percent
+
+      let line = `${label}: ${percent}%`
+      if (
+        Number.isFinite(event?.bytes) &&
+        Number.isFinite(event?.totalBytes) &&
+        event.totalBytes > 0
+      ) {
+        line += ` (${formatBytes(event.bytes)} / ${formatBytes(event.totalBytes)})`
+      }
+
+      printLine(line)
+      if (process.stdout.isTTY && percent >= 100) {
+        process.stdout.write('\n')
+        hasTTYLine = false
+      }
+    },
+    finish() {
+      if (process.stdout.isTTY && hasTTYLine) {
+        process.stdout.write('\n')
+        hasTTYLine = false
+      }
+    },
+  }
+}
+
 async function resolvePassword({ password, askPassword }) {
   if (password) return password
   if (askPassword) return readHiddenPassword('Password: ')
@@ -83,11 +134,15 @@ async function runCLI(argv) {
   if (parsed.mode === 'upload') {
     await ensureReadableFile(parsed.target)
     const password = await resolvePassword(parsed)
+    const progressPrinter = parsed.json
+      ? null
+      : createProgressPrinter('上传进度')
 
     const session = await startUploadSession({
       baseURL: parsed.baseURL,
       filePath: parsed.target,
       password,
+      onProgress: progressPrinter ? progressPrinter.onProgress : undefined,
     })
 
     if (parsed.json) {
@@ -103,6 +158,9 @@ async function runCLI(argv) {
     const reason = await session.waitUntilStopped({
       stopOnFirstDownload: !parsed.keepAlive,
     })
+    if (progressPrinter) {
+      progressPrinter.finish()
+    }
 
     if (reason === 'completed') {
       if (parsed.json) {
@@ -119,11 +177,18 @@ async function runCLI(argv) {
   }
 
   const password = await resolvePassword(parsed)
+  const progressPrinter = parsed.json
+    ? null
+    : createProgressPrinter('下载进度')
   const result = await runDownload({
     shareURL: parsed.target,
     password,
     output: parsed.output,
+    onProgress: progressPrinter ? progressPrinter.onProgress : undefined,
   })
+  if (progressPrinter) {
+    progressPrinter.finish()
+  }
 
   if (parsed.json) {
     printJSON({

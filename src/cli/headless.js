@@ -127,7 +127,24 @@ function mapAlertToError(alertText) {
   )
 }
 
-async function startUploadSession({ baseURL, filePath, password }) {
+function parseUploadAckLog(text) {
+  const match = text.match(/received chunk ack:\s+\S+\s+offset\s+(\d+)\s+bytes\s+(\d+)/)
+  if (!match) return null
+  return {
+    offset: Number(match[1]),
+    bytesReceived: Number(match[2]),
+  }
+}
+
+function parsePercentageText(text) {
+  const match = String(text || '').match(/(\d{1,3})%/)
+  if (!match) return null
+  const value = Number(match[1])
+  if (Number.isNaN(value)) return null
+  return Math.max(0, Math.min(100, value))
+}
+
+async function startUploadSession({ baseURL, filePath, password, onProgress }) {
   const browser = await launchBrowser()
   const context = await browser.newContext()
   const page = await context.newPage()
@@ -182,6 +199,8 @@ async function startUploadSession({ baseURL, filePath, password }) {
       )
     }
 
+    const fileSize = (await fs.promises.stat(filePath)).size
+
     return {
       shortURL,
       longURL,
@@ -193,10 +212,38 @@ async function startUploadSession({ baseURL, filePath, password }) {
         return new Promise((resolve) => {
           let done = false
           let domPollTimer = null
+          let maxAckedBytes = 0
+          let lastProgressPercent = -1
 
           const onConsole = (msg) => {
-            if (!stopOnFirstDownload) return
             const text = msg.text()
+            const uploadAck = parseUploadAckLog(text)
+            if (uploadAck && typeof onProgress === 'function' && fileSize > 0) {
+              if (uploadAck.offset === 0 && maxAckedBytes >= fileSize) {
+                maxAckedBytes = 0
+                lastProgressPercent = -1
+              }
+
+              maxAckedBytes = Math.max(
+                maxAckedBytes,
+                uploadAck.offset + uploadAck.bytesReceived,
+              )
+              const progressPercent = Math.min(
+                100,
+                Math.round((maxAckedBytes / fileSize) * 100),
+              )
+              if (progressPercent !== lastProgressPercent) {
+                lastProgressPercent = progressPercent
+                onProgress({
+                  phase: 'upload',
+                  percent: progressPercent,
+                  bytes: maxAckedBytes,
+                  totalBytes: fileSize,
+                })
+              }
+            }
+
+            if (!stopOnFirstDownload) return
             if (text.includes('[UploaderConnections] transfer completed successfully')) {
               finish('completed')
             }
@@ -225,6 +272,19 @@ async function startUploadSession({ baseURL, filePath, password }) {
             if (done) return
             done = true
             cleanup()
+            if (
+              reason === 'completed' &&
+              typeof onProgress === 'function' &&
+              fileSize > 0 &&
+              lastProgressPercent < 100
+            ) {
+              onProgress({
+                phase: 'upload',
+                percent: 100,
+                bytes: fileSize,
+                totalBytes: fileSize,
+              })
+            }
             await context.close().catch(() => {})
             await browser.close().catch(() => {})
             resolve(reason)
@@ -329,15 +389,32 @@ async function runDownload({
   shareURL,
   password,
   output,
+  onProgress,
   cwd = process.cwd(),
 }) {
   const browser = await launchBrowser()
   const context = await browser.newContext({ acceptDownloads: true })
   const page = await context.newPage()
+  let progressTimer = null
+  let lastProgressPercent = -1
 
   try {
     await gotoWithRetry(page, shareURL)
     await waitForDownloaderReadyState(page, password)
+
+    if (typeof onProgress === 'function') {
+      progressTimer = setInterval(async () => {
+        const text = await page
+          .locator('#progress-percentage')
+          .first()
+          .textContent()
+          .catch(() => '')
+        const percent = parsePercentageText(text)
+        if (percent === null || percent === lastProgressPercent) return
+        lastProgressPercent = percent
+        onProgress({ phase: 'download', percent })
+      }, 300)
+    }
 
     const downloadEvent = page.waitForEvent('download', {
       timeout: TIMEOUTS.downloadStartMs,
@@ -367,6 +444,10 @@ async function runDownload({
 
     const stat = await fs.promises.stat(savePath)
 
+    if (typeof onProgress === 'function' && lastProgressPercent < 100) {
+      onProgress({ phase: 'download', percent: 100 })
+    }
+
     return {
       savedPath: savePath,
       bytes: stat.size,
@@ -374,6 +455,10 @@ async function runDownload({
   } catch (error) {
     throw error
   } finally {
+    if (progressTimer) {
+      clearInterval(progressTimer)
+      progressTimer = null
+    }
     await context.close().catch(() => {})
     await browser.close().catch(() => {})
   }
