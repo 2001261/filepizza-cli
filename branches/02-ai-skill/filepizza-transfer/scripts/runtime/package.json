@@ -1,0 +1,10 @@
+{
+  "name": "filepizza-skill-runtime",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Embedded runtime for filepizza-transfer skill",
+  "license": "BSD-3-Clause",
+  "dependencies": {
+    "playwright": "^1.53.2"
+  }
+}

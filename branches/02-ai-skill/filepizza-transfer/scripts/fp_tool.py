@@ -35,21 +35,78 @@ def sessions_dir() -> Path:
     return (Path.home() / ".filepizza-cli" / "sessions").resolve()
 
 
-def resolve_fp_binary() -> str:
+def runtime_dir() -> Path:
+    return (Path(__file__).resolve().parent / "runtime").resolve()
+
+
+def resolve_package_manager() -> List[str]:
+    npm = shutil.which("npm")
+    if npm:
+        return [npm, "install", "--no-fund", "--no-audit"]
+
+    pnpm = shutil.which("pnpm")
+    if pnpm:
+        return [pnpm, "install", "--prod"]
+
+    raise ToolError(
+        "Neither npm nor pnpm was found. Install Node.js package manager to bootstrap the skill runtime."
+    )
+
+
+def ensure_local_runtime() -> List[str]:
+    node_binary = shutil.which("node")
+    if not node_binary:
+        raise ToolError(
+            "node command not found. Install Node.js so the embedded skill runtime can run."
+        )
+
+    rt_dir = runtime_dir()
+    fp_entry = rt_dir / "bin" / "fp.js"
+    if not fp_entry.exists():
+        raise ToolError(f"embedded runtime entry not found: {fp_entry}")
+
+    playwright_package = rt_dir / "node_modules" / "playwright" / "package.json"
+    if not playwright_package.exists():
+        install_command = resolve_package_manager()
+        env = os.environ.copy()
+        env.setdefault("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
+        completed = subprocess.run(
+            install_command,
+            cwd=str(rt_dir),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            env=env,
+        )
+        if completed.returncode != 0:
+            stderr = completed.stderr.strip()
+            stdout = completed.stdout.strip()
+            details = stderr or stdout or "unknown installer error"
+            raise ToolError(
+                f"failed to install embedded runtime dependencies: {details}"
+            )
+
+    return [node_binary, str(fp_entry)]
+
+
+def resolve_fp_command() -> List[str]:
+    if os.environ.get("FILEPIZZA_USE_EMBEDDED") == "1":
+        return ensure_local_runtime()
+
     explicit = os.environ.get("FILEPIZZA_FP")
     if explicit:
         candidate = Path(explicit).expanduser().resolve()
         if candidate.exists():
-            return str(candidate)
+            return [str(candidate)]
         raise ToolError(f"FILEPIZZA_FP points to missing file: {candidate}")
 
     discovered = shutil.which("fp")
     if discovered:
-        return discovered
+        return [discovered]
 
-    raise ToolError(
-        "fp command not found. Install runtime from branches/01-shell-installer first."
-    )
+    return ensure_local_runtime()
 
 
 def read_json_events_from_file(file_path: Path) -> List[Dict[str, Any]]:
@@ -180,9 +237,9 @@ def wait_for_share_url(
 
 
 def command_check(_: argparse.Namespace) -> None:
-    fp_binary = resolve_fp_binary()
+    fp_command = resolve_fp_command()
     completed = subprocess.run(
-        [fp_binary, "--help"],
+        fp_command + ["--help"],
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -193,11 +250,17 @@ def command_check(_: argparse.Namespace) -> None:
         raise ToolError(
             f"fp health check failed with exit code {completed.returncode}: {completed.stderr.strip()}"
         )
-    emit({"ok": True, "fp": fp_binary})
+    emit(
+        {
+            "ok": True,
+            "fp": fp_command[0],
+            "fp_command": fp_command,
+        }
+    )
 
 
 def command_upload_start(args: argparse.Namespace) -> None:
-    fp_binary = resolve_fp_binary()
+    fp_command = resolve_fp_command()
     source_file = Path(args.file).expanduser().resolve()
     if not source_file.is_file():
         raise ToolError(f"file not found: {source_file}")
@@ -215,7 +278,7 @@ def command_upload_start(args: argparse.Namespace) -> None:
     stdout_log = root / f"{session_name}.stdout.log"
     stderr_log = root / f"{session_name}.stderr.log"
 
-    command: List[str] = [fp_binary, "upload", str(source_file), "--json"]
+    command: List[str] = [*fp_command, "upload", str(source_file), "--json"]
     if args.password:
         command.extend(["--password", args.password])
     if args.keep_alive:
@@ -313,8 +376,8 @@ def command_upload_stop(args: argparse.Namespace) -> None:
 
 
 def command_download(args: argparse.Namespace) -> None:
-    fp_binary = resolve_fp_binary()
-    command: List[str] = [fp_binary, "download", args.url, "--json"]
+    fp_command = resolve_fp_command()
+    command: List[str] = [*fp_command, "download", args.url, "--json"]
     if args.password:
         command.extend(["--password", args.password])
     if args.output:

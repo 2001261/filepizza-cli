@@ -42,7 +42,7 @@ node ./bin/fp.js download "https://file.pizza/download/xxxx"
 1. `branches/01-shell-installer`  
    Shell 环境安装封装（Linux/macOS/PowerShell）
 2. `branches/02-ai-skill`  
-   AI Skill 封装（可调用 Branch 1 安装出来的 `fp` 进行传输）
+   AI Skill 封装（支持自带 runtime 自举，也可复用全局 `fp`）
 
 OpenClaw 接入（tools 注册、skill 激活与触发规则）请看：
 

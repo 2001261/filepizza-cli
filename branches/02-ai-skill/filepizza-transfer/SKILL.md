@@ -1,13 +1,18 @@
 ---
 name: filepizza-transfer
 description: Use this skill when an AI agent needs terminal-based file upload or download through file.pizza, especially on non-GUI environments. This skill wraps the shell-installed fp runtime, supports starting upload sessions, monitoring/stopping sessions, and downloading files through scriptable commands.
-metadata: {"openclaw":{"requires":{"bins":["python","fp"]}}}
+metadata: {"openclaw":{"requires":{"bins":["python","node"]}}}
 user-invocable: true
 ---
 
 # FilePizza Transfer
 
-本 skill 仅在 `fp` runtime 可用时使用（`fp --help` 必须成功）。
+本 skill 默认自带 runtime 引导。
+
+- 优先使用系统已安装的 `fp`（若存在）。
+- 若系统没有 `fp`，自动回退到 `scripts/runtime` 内置 runtime（首次会自动安装依赖）。
+- 若需要固定使用内置 runtime，可设置 `FILEPIZZA_USE_EMBEDDED=1`。
+- 因此不再强依赖先安装 `branches/01-shell-installer`。
 
 ## 激活与触发
 
@@ -27,6 +32,7 @@ user-invocable: true
 - 本 skill 默认通过 AI 平台的 `exec` 工具执行 `python scripts/fp_tool.py ...`。
 - 如果 OpenClaw 启用了 `tools.allow` 白名单，必须允许 `exec`（或允许 `group:runtime`）。
 - 如果 OpenClaw 启用了 `tools.deny`，不能屏蔽 `exec`。
+- 运行前提：宿主机有 `python` 和 `node`，且至少有 `npm` 或 `pnpm` 用于首次依赖安装。
 
 ## Use The Tool Script
 
@@ -88,4 +94,4 @@ Optional flags:
 
 - Prefer `upload-start` + `upload-status` for long-running transfers.
 - Return JSON results directly to the user.
-- If `fp` is missing, tell the user to run the shell installer package first.
+- If neither global `fp` nor embedded runtime can be used, return the exact bootstrap failure reason.
