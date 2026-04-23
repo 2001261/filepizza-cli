@@ -89,13 +89,15 @@ function createProgressPrinter(label) {
       const normalizedPercent = Math.max(0, Math.min(100, Math.round(percent)))
       const bytes = Number(event?.bytes)
       const totalBytes = Number(event?.totalBytes)
-      const hasByteProgress =
+      const hasBytes =
         Number.isFinite(bytes) &&
-        Number.isFinite(totalBytes) &&
-        totalBytes > 0 &&
         bytes >= 0
+      const hasTotalBytes =
+        hasBytes &&
+        Number.isFinite(totalBytes) &&
+        totalBytes > 0
 
-      if (hasByteProgress) {
+      if (hasBytes) {
         speedSamples.push({ ts: now, bytes })
         while (speedSamples.length > 0 && now - speedSamples[0].ts > speedWindowMs) {
           speedSamples.shift()
@@ -103,7 +105,7 @@ function createProgressPrinter(label) {
       }
 
       const percentChanged = normalizedPercent !== lastPercent
-      const bytesChanged = hasByteProgress && bytes !== lastBytes
+      const bytesChanged = hasBytes && bytes !== lastBytes
       if (!percentChanged && !bytesChanged) return
 
       if (
@@ -122,11 +124,13 @@ function createProgressPrinter(label) {
       }
 
       let line = `${label}: ${normalizedPercent}%`
-      if (hasByteProgress) {
+      if (hasTotalBytes) {
         line += ` (${formatBytes(bytes)} / ${formatBytes(totalBytes)})`
+      } else if (hasBytes) {
+        line += ` (${formatBytes(bytes)})`
       }
 
-      if (hasByteProgress) {
+      if (hasBytes) {
         let realtimeSpeed = null
         if (speedSamples.length >= 2) {
           const oldest = speedSamples[0]
@@ -152,7 +156,7 @@ function createProgressPrinter(label) {
       printLine(line)
       lastRenderAt = now
       lastPercent = normalizedPercent
-      if (hasByteProgress) {
+      if (hasBytes) {
         lastBytes = bytes
       }
 
